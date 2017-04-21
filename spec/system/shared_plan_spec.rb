@@ -13,19 +13,12 @@ describe 'shared plan' do
     )
   end
 
-  before(:all) do
-    @service_broker_host = bosh_director.ips_for_job(
-      environment.bosh_service_broker_job_name,
-      bosh_manifest.deployment_name,
-    ).first
-  end
-
   # TODO do not manually run drain once bosh bug fixed
   let(:manually_drain) { '/var/vcap/jobs/cf-redis-broker/bin/drain' }
 
   describe 'redis provisioning' do
     before(:all) do
-      @preprovision_timestamp = ssh_gateway.execute_on(@service_broker_host, 'date +%s')
+      @preprovision_timestamp = bosh_ssh("", environment.bosh_service_broker_job_name, "0", "date +%s")
       @service_instance       = service_broker.provision_instance(service.name, service.plan)
     end
 
@@ -34,7 +27,7 @@ describe 'shared plan' do
     end
 
     it 'logs instance provisioning' do
-      vm_log = root_execute_on(@service_broker_host, 'cat /var/log/syslog')
+      vm_log = bosh_ssh("", environment.bosh_service_broker_job_name, "0", "sudo cat /var/log/syslog")
       contains_expected_log = drop_log_lines_before(@preprovision_timestamp, vm_log).any? do |line|
         line.include?('Successfully provisioned Redis instance') &&
         line.include?('shared-vm') &&
@@ -49,12 +42,12 @@ describe 'shared plan' do
     before(:all) do
       @service_instance = service_broker.provision_instance(service.name, service.plan)
 
-      @predeprovision_timestamp = ssh_gateway.execute_on(@service_broker_host, "date +%s")
+      @predeprovision_timestamp = bosh_ssh("", environment.bosh_service_broker_job_name, "0", "date +%s")
       service_broker.deprovision_instance(@service_instance)
     end
 
     it 'logs instance deprovisioning' do
-      vm_log = root_execute_on(@service_broker_host, 'cat /var/log/syslog')
+      vm_log = bosh_ssh("", environment.bosh_service_broker_job_name, "0", "sudo cat /var/log/syslog")
       contains_expected_log = drop_log_lines_before(@predeprovision_timestamp, vm_log).any? do |line|
         line.include?('Successfully deprovisioned Redis instance') &&
         line.include?('shared-vm') &&
@@ -76,10 +69,10 @@ describe 'shared plan' do
 
       host = @service_binding.credentials.fetch(:host)
 
-      @prestop_timestamp = ssh_gateway.execute_on(host, "date +%s")
+      @prestop_timestamp = bosh_ssh("", environment.bosh_service_broker_job_name, "0", "date +%s")
       bosh_director.stop(environment.bosh_service_broker_job_name, 0)
 
-      @vm_log = root_execute_on(host, "cat /var/log/syslog")
+      @vm_log = bosh_ssh("", environment.bosh_service_broker_job_name, "0", "sudo cat /var/log/syslog")
 
       bosh_director.recreate_all([environment.bosh_service_broker_job_name])
     end
@@ -96,9 +89,9 @@ describe 'shared plan' do
 
   context 'when stopping the broker vm' do
     before(:all) do
-      @prestop_timestamp = ssh_gateway.execute_on(@service_broker_host, "date +%s")
+      @prestop_timestamp = bosh_ssh("", environment.bosh_service_broker_job_name, "0", "date +%s")
       bosh_director.stop(environment.bosh_service_broker_job_name, 0)
-      @vm_log = root_execute_on(@service_broker_host, "cat /var/log/syslog")
+      @vm_log = bosh_ssh("", environment.bosh_service_broker_job_name, "0", "sudo cat /var/log/syslog")
     end
 
     after(:all) do
@@ -145,14 +138,14 @@ describe 'shared plan' do
     describe 'pidfiles' do
       it 'do not appear in persistent storage' do
         host = @service_binding.credentials.fetch(:host)
-        persisted_pids = ssh_gateway.execute_on(host, 'find /var/vcap/store/ -name "redis-server.pid" 2>/dev/null')
-        expect(persisted_pids).to be_nil, "Actual output of find was: #{persisted_pids}"
+        persisted_pids = bosh_ssh("", environment.bosh_service_broker_job_name, "0", 'sh -c ' + Shellwords.escape('find /var/vcap/store/ -name "redis-server.pid" 2>/dev/null'))
+        expect(persisted_pids).to be_empty, "Actual output of find was: #{persisted_pids}"
       end
 
       it 'appear in ephemeral storage' do
         host = @service_binding.credentials.fetch(:host)
-        ephemeral_pids = ssh_gateway.execute_on(host, 'find /var/vcap/sys/run/shared-instance-pidfiles/ -name *.pid 2>/dev/null')
-        expect(ephemeral_pids).to_not be_nil
+        ephemeral_pids = bosh_ssh("", environment.bosh_service_broker_job_name, "0", 'find /var/vcap/sys/run/shared-instance-pidfiles/ -name *.pid 2>/dev/null')
+        expect(ephemeral_pids).to_not be_empty
         expect(ephemeral_pids.lines.length).to eq(1), "Actual output of find was: #{ephemeral_pids}"
       end
     end
@@ -204,43 +197,44 @@ describe 'shared plan' do
     it_behaves_like 'a redis instance'
   end
 
-  context 'when repeatedly draining a redis instance' do
+  fcontext 'when repeatedly draining a redis instance' do
     before(:all) do
       @service_instance = service_broker.provision_instance(service.name, service.plan)
       @service_binding  = service_broker.bind_instance(@service_instance)
       @vm_ip            = @service_binding.credentials[:host]
 
-      ps_output = ssh_gateway.execute_on(@vm_ip, 'ps aux | grep redis-serve[r]')
+      ps_output = bosh_ssh("", environment.bosh_service_broker_job_name, "0", 'ps aux | grep redis-serve[r]')
       expect(ps_output).not_to be_nil
       expect(ps_output.lines.length).to eq(1)
 
       drain_command = '/var/vcap/jobs/cf-redis-broker/bin/drain'
-      root_execute_on(@vm_ip, drain_command)
+      bosh_ssh("", environment.bosh_service_broker_job_name, "0", "sudo #{drain_command}")
       sleep 1
 
-      ps_output = ssh_gateway.execute_on(@vm_ip, 'ps aux | grep redis-serve[r]')
-      expect(ps_output).to be_nil
 
-      root_execute_on(@vm_ip, '/var/vcap/bosh/bin/monit restart process-watcher')
+      ps_output = bosh_ssh("", environment.bosh_service_broker_job_name, "0", 'ps aux | grep redis-serve[r]')
+      expect(ps_output).to be_empty
 
-      expect(wait_for_process_start('process-watcher', @vm_ip)).to eq(true)
+      bosh_ssh("", environment.bosh_service_broker_job_name, "0", "sudo /var/vcap/bosh/bin/monit restart process-watcher")
 
-      root_execute_on(@vm_ip, drain_command)
+      expect(wait_for_process_start('process-watcher', environment.bosh_service_broker_job_name, "0")).to eq(true)
+
+      bosh_ssh("", environment.bosh_service_broker_job_name, "0", "sudo #{drain_command}")
       sleep 1
     end
 
     after(:all) do
-      root_execute_on(@vm_ip, '/var/vcap/bosh/bin/monit restart process-watcher')
+      bosh_ssh("", environment.bosh_service_broker_job_name, "0", "sudo /var/vcap/bosh/bin/monit restart process-watcher")
 
-      expect(wait_for_process_start('process-watcher', @vm_ip)).to eq(true)
+      expect(wait_for_process_start('process-watcher', environment.bosh_service_broker_job_name, "0")).to eq(true)
 
       service_broker.unbind_instance(@service_binding)
       service_broker.deprovision_instance(@service_instance)
     end
 
     it 'successfuly drained the redis instance' do
-      ps_output = ssh_gateway.execute_on(@vm_ip, 'ps aux | grep redis-serve[r]')
-      expect(ps_output).to be_nil
+      ps_output = bosh_ssh("", environment.bosh_service_broker_job_name, "0", "ps aux | grep redis-serve[r]")
+      expect(ps_output).to be_empty
     end
   end
 
@@ -299,7 +293,7 @@ describe 'shared plan' do
       return contains_expected_shutdown_log if contains_expected_shutdown_log
 
       sleep 5
-      @vm_log = root_execute_on(@service_broker_host, "cat /var/log/syslog")
+      @vm_log = bosh_ssh("", environment.bosh_service_broker_job_name, "0", "sudo cat /var/log/syslog")
     end
   end
 end
