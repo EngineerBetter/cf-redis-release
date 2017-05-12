@@ -24,8 +24,9 @@ if [ "$infrastructure" != "aws" ] && \
    [ "$infrastructure" != "azure" ] && \
    [ "$infrastructure" != "warden" ] && \
    [ "$infrastructure" != "openstack" ] && \
+   [ "$infrastructure" != "gcp" ] && \
    [ "$infrastructure" != "vsphere" ] ; then
- echo "usage: ${0} <aws|azure|warden|openstack|vsphere> [stubs...]"
+ echo "usage: ${0} <aws|azure|warden|openstack|vsphere|gcp> [stubs...]"
  exit 1
 fi
 

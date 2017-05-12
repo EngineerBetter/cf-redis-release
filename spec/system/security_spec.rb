@@ -5,8 +5,8 @@ require 'timeout'
 
 describe 'security' do
   describe 'the broker' do
-    it 'uses latest version of nginx' do
-      output = ssh_gateway.execute_on(broker_host, '/var/vcap/packages/cf-redis-nginx/sbin/nginx -v').strip
+    fit 'uses latest version of nginx' do
+      broker_ssh.exec!('/var/vcap/packages/cf-redis-nginx/sbin/nginx -v')
       expect(output).to eql('nginx version: nginx/1.8.0')
     end
 

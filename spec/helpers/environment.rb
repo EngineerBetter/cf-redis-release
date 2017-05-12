@@ -1,5 +1,6 @@
 require 'prof/environment/cloud_foundry'
 
+require 'helpers/utilities'
 require 'support/redis_service_broker'
 require 'support/redis_service_client_builder'
 
@@ -18,6 +19,14 @@ class FilteredStderr < StringIO
 end
 
 module Helpers
+  def broker_ssh
+    BoshSSH.new('cf-redis-broker', 0).with_gateway(
+      'pcf.pikachu.gcp.london.cf-app.com',
+      'ubuntu',
+      '/tmp/pikachu.pem',
+    )
+  end
+
   module Environment
     fail "Must specify BOSH_MANIFEST environment variable" unless ENV.key?('BOSH_MANIFEST')
 
@@ -30,9 +39,9 @@ module Helpers
         options[:bosh_target]          = ENV['BOSH_TARGET']                 if ENV.key?('BOSH_TARGET')
         options[:bosh_username]        = ENV['BOSH_USERNAME']               if ENV.key?('BOSH_USERNAME')
         options[:bosh_password]        = ENV['BOSH_PASSWORD']               if ENV.key?('BOSH_PASSWORD')
-        options[:ssh_gateway_host]     = URI.parse(ENV['BOSH_TARGET']).host if ENV.key?('BOSH_TARGET')
-        options[:ssh_gateway_username] = 'vcap'                             if ENV.key?('BOSH_TARGET')
-        options[:ssh_gateway_password] = 'c1oudc0w'                         if ENV.key?('BOSH_TARGET')
+        # options[:ssh_gateway_host]     = 'pcf.pikachu.gcp.london.cf-app.com' if ENV.key?('BOSH_TARGET')
+        # options[:ssh_gateway_username] = 'ubuntu'                           if ENV.key?('BOSH_TARGET')
+        # options[:ssh_gateway_password] = 'c1oudc0w'                         if ENV.key?('BOSH_TARGET')
 
         options[:use_proxy]            = ENV['USE_PROXY'] == 'true'
         Prof::Environment::CloudFoundry.new(options)

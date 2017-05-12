@@ -136,7 +136,7 @@ base_jobs:
   properties:
     broker:
       name: (( .properties.redis.broker.name || "redis" ))
-      host: (( .properties.redis.broker.route_name "." .meta.apps_domain ))
+      host: (( .properties.redis.broker.route_name "." .meta.external_domain ))
       username: (( .properties.redis.broker.auth.username ))
       password: (( .properties.redis.broker.auth.password ))
   resource_pool: (( .meta.broker_registrar.resource_pool || .resource_pools.[0].name ))
