@@ -27,6 +27,40 @@ module Helpers
     )
   end
 
+  class BoshSSH
+    def initialize job, node
+      @job = job
+      @node = node
+      @bosh = Bosh.new(
+        ENV['BOSH_TARGET'],
+        ENV['BOSH_USERNAME'],
+        ENV['BOSH_PASSWORD'],
+        '/tmp/pikachu.cert',
+        'cf-redis'
+      )
+    end
+
+    def exec! command
+      @bosh.ssh(
+        @job,
+        @node,
+        command,
+        gw_user: 'ubuntu',
+        gw_host: 'pcf.pikachu.gcp.london.cf-app.com',
+        gw_private_key: '/tmp/pikachu.pem',
+      )
+    end
+
+  end
+
+  def broker_ssh
+    BoshSSH.new 'cf-redis-broker', 0
+  end
+
+  def node_ssh
+    BoshSSH.new 'dedicated-node', 0
+  end
+
   module Environment
     fail "Must specify BOSH_MANIFEST environment variable" unless ENV.key?('BOSH_MANIFEST')
 

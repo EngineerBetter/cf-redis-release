@@ -5,13 +5,13 @@ require 'timeout'
 
 describe 'security' do
   describe 'the broker' do
-    fit 'uses latest version of nginx' do
-      broker_ssh.exec!('/var/vcap/packages/cf-redis-nginx/sbin/nginx -v')
-      expect(output).to eql('nginx version: nginx/1.8.0')
+    it 'uses latest version of nginx' do
+      output = broker_ssh.exec!('/var/vcap/packages/cf-redis-nginx/sbin/nginx -v').strip
+      expect(output).to eq('nginx version: nginx/1.8.0')
     end
 
     it 'does not listen publicly on the backend_port' do
-      netstat_output = ssh_gateway.execute_on(broker_host, "netstat -l | grep #{broker_backend_port}")
+      netstat_output = broker_ssh.exec!("netstat -l | grep #{broker_backend_port}")
       expect(netstat_output.lines.count).to eq(1)
       expect(netstat_output).to include("localhost:#{broker_backend_port}")
     end
@@ -19,7 +19,7 @@ describe 'security' do
 
   describe 'the agents' do
     it 'uses latest version of nginx' do
-      output = ssh_gateway.execute_on(node_hosts.first, '/var/vcap/packages/cf-redis-nginx/sbin/nginx -v').strip
+      output = node_ssh.exec!('/var/vcap/packages/cf-redis-nginx/sbin/nginx -v').strip
       expect(output).to eql('nginx version: nginx/1.8.0')
     end
 
@@ -29,7 +29,7 @@ describe 'security' do
     end
 
     it 'does not listen publicly on the backend_port' do
-      netstat_output = ssh_gateway.execute_on(node_hosts.first, "netstat -l | grep #{agent_backend_port}")
+      netstat_output = node_ssh.exec!("netstat -l | grep #{agent_backend_port}")
       expect(netstat_output.lines.count).to eq(1)
       expect(netstat_output).to include("localhost:#{agent_backend_port}")
     end
@@ -41,7 +41,7 @@ def get_allowed_ciphers
     #!/bin/bash
 
     SERVER=localhost:4443
-    ciphers=$(openssl ciphers \'ALL:eNULL\' | sed -e \'s/:/ /g\')
+    ciphers=$(openssl ciphers "ALL:eNULL" | sed -e "s/:/ /g")
 
     function test_cipher() {
       echo -n | openssl s_client -cipher "$1" -connect $SERVER 2>&1
@@ -66,7 +66,7 @@ def get_allowed_ciphers
     done
   '
 
-  allowed_ciphers = ssh_gateway.execute_on(node_hosts.first, command)
+  allowed_ciphers = node_ssh.exec!(command)
   expect(allowed_ciphers).not_to be_nil
-  allowed_ciphers.split "\n"
+  allowed_ciphers.split("\n").map{|item| item.strip}
 end

@@ -1,4 +1,5 @@
 require 'open3'
+require 'json'
 
 def root_execute_on(ip, command)
   root_prompt = '[sudo] password for vcap: '
@@ -46,57 +47,64 @@ def process_running?(process_name, vm_ip)
   !monit_output.strip.empty?
 end
 
-class BoshSSH
-  def initialize job, node
-    @job = job
-    @node = node
+class Bosh
+  def initialize environment, client, client_secret, ca_cert, deployment_name
+    @environment = environment
+    @client = client
+    @client_secret = client_secret
+    @ca_cert = ca_cert
+    @deployment_name = deployment_name
   end
 
-  def with_gateway host, user, pkey
-    @gateway_host = host
-    @gateway_user = user
-    @gateway_identity_file = pkey
+  def ssh job, node, command, gw_host: nil, gw_user: nil, gw_private_key: nil
+    cmd = make_base_command + ['ssh']
 
-    self
+    cmd += gateway_params(gw_host, gw_user, gw_private_key) if !gw_host.nil?
+    cmd += ["#{job}/#{node.to_s}", "'#{command}'"]
+    cmd = cmd.join(' ')
+
+    get_stdout_from_ssh_json JSON.parse(%x( #{cmd} ))
   end
 
-  def exec!(command)
-    _, stdout, stderr, wait_thr = Open3.popen3(make_cmd(command))
-    STDERR.puts stderr.read if !wait_thr.value.success?
-    strip_bosh_task_info(stdout.read)
+  def make_base_command
+    cmd = [
+      'bosh-cli',
+      '--ca-cert', @ca_cert,
+      '-e', @environment,
+      '--client', @client,
+      '--client-secret', @client_secret,
+      '-d', @deployment_name,
+      '--json',
+    ]
   end
 
-  private
-    def strip_bosh_task_info(output)
-      output = output.split('Cleaning up ssh artifacts', 2)[0]
-      output = output.split('cf-redis-broker/0', 3)[-1]
+  def gateway_params(gw_host, gw_user, gw_private_key)
+    [
+      '--gw-host',        gw_host,
+      '--gw-user',        gw_user,
+      '--gw-private-key', gw_private_key,
+    ]
+  end
 
-      output.strip
+  def get_stdout_from_ssh_json(output)
+    output = output['Blocks']
+    stdout = []
+
+    inside_stdout_block = false
+    output.each do |line|
+      if line.include? ': stderr |'
+        inside_stdout_block = false
+        next
+      end
+
+      if line.include? ': stdout |'
+        inside_stdout_block = true
+        next
+      end
+
+      stdout.push(line) if inside_stdout_block
     end
 
-    def has_gateway?
-      !@gateway_host.nil?
-    end
-
-    def make_cmd command
-      cmd = ['bosh', 'ssh']
-      cmd = cmd + gateway_params if has_gateway?
-
-      cmd = cmd + [@job, @node.to_s, "'#{command}'"]
-      cmd.join(' ')
-    end
-
-    def gateway_params
-      [
-        '--gateway_host',             @gateway_host,
-        '--gateway_user',             @gateway_user,
-        '--gateway_identity_file',    @gateway_identity_file,
-        '--default_password',         'p',
-        '--strict_host_key_checking', 'no',
-      ]
-    end
-
-    def strip_task_info(output)
-      output.split('Cleaning up ssh artifacts')
-    end
+    stdout.join()
+  end
 end
