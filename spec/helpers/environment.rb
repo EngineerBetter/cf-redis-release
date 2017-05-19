@@ -30,13 +30,24 @@ module Helpers
         options[:bosh_target]          = ENV['BOSH_TARGET']                 if ENV.key?('BOSH_TARGET')
         options[:bosh_username]        = ENV['BOSH_USERNAME']               if ENV.key?('BOSH_USERNAME')
         options[:bosh_password]        = ENV['BOSH_PASSWORD']               if ENV.key?('BOSH_PASSWORD')
-        options[:ssh_gateway_host]     = URI.parse(ENV['BOSH_TARGET']).host if ENV.key?('BOSH_TARGET')
-        options[:ssh_gateway_username] = 'vcap'                             if ENV.key?('BOSH_TARGET')
-        options[:ssh_gateway_password] = 'c1oudc0w'                         if ENV.key?('BOSH_TARGET')
 
-        options[:use_proxy]            = ENV['USE_PROXY'] == 'true'
+
+        options[:ssh_gateway_host]        = ssh_gateway_host
+        options[:ssh_gateway_private_key] = ENV['JUMPBOX_PRIVATE_KEY'] if ENV.key?('JUMPBOX_PRIVATE_KEY')
+        options[:ssh_gateway_username]    = ENV['JUMPBOX_USERNAME'] if ENV.key?('JUMPBOX_USERNAME')
+        options[:ssh_gateway_password]    = ENV['JUMPBOX_PASSWORD'] if ENV.key?('JUMPBOX_PASSWORD')
+
+        options[:use_proxy]               = ENV['USE_PROXY'] == 'true'
+        options[:bosh_target_is_public]   = ENV['BOSH_TARGET_IS_PUBLIC'] == 'true'
+        options[:bosh_ca_cert]            = ENV['BOSH_CA_CERT'] if ENV.key?('BOSH_CA_CERT')
         Prof::Environment::CloudFoundry.new(options)
       end
+    end
+
+    def ssh_gateway_host
+      host = ENV.fetch('JUMPBOX_HOST', ENV.fetch('BOSH_TARGET', nil))
+      host = 'http://' + host unless host.start_with? 'http'
+      URI.parse(host).host unless host.nil?
     end
 
     def redis_service_broker
@@ -55,8 +66,7 @@ module Helpers
       environment.bosh_director
     end
 
-    # net-ssh makes a deprecated call to `timeout`. We ignore these messages
-    # because they pollute logs.
+    # net-ssh makes a deprecated call to `timeout`. We ignore these messages because they pollute logs.
     # After using the filtered stderr we ensure to reassign the original stderr
     # stream.
     def ssh_gateway

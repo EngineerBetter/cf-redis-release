@@ -18,6 +18,8 @@ describe 'shared plan' do
       environment.bosh_service_broker_job_name,
       bosh_manifest.deployment_name,
     ).first
+
+    puts "THIS IS FROM BOSH: #{@service_broker_host}"
   end
 
   # TODO do not manually run drain once bosh bug fixed
@@ -33,7 +35,7 @@ describe 'shared plan' do
       service_broker.deprovision_instance(@service_instance)
     end
 
-    it 'logs instance provisioning' do
+    fit 'logs instance provisioning' do
       vm_log = root_execute_on(@service_broker_host, 'cat /var/log/syslog')
       contains_expected_log = drop_log_lines_before(@preprovision_timestamp, vm_log).any? do |line|
         line.include?('Successfully provisioned Redis instance') &&
